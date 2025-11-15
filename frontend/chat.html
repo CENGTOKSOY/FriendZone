@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FriendZone - Sohbet</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/chat.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Sol Sidebar - Üyeler -->
+        <div class="chat-sidebar">
+            <div class="sidebar-header">
+                <h2>Topluluk Üyeleri</h2>
+                <div class="member-count">
+                    <span id="memberCount">0</span> üye çevrimiçi
+                </div>
+            </div>
+            <div class="members-list" id="membersList">
+                <!-- Üyeler buraya dinamik olarak eklenecek -->
+            </div>
+        </div>
+
+        <!-- Ana Sohbet Alanı -->
+        <div class="chat-main">
+            <!-- Sohbet Başlığı -->
+            <div class="chat-header">
+                <div class="chat-info">
+                    <h1 id="communityName">Topluluk İsmi</h1>
+                    <div class="chat-description" id="communityDescription">Topluluk açıklaması</div>
+                </div>
+                <div class="chat-actions">
+                    <button class="btn btn-secondary" id="communitySettingsBtn">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="btn btn-primary" id="inviteBtn">
+                        <i class="fas fa-user-plus"></i> Davet Et
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mesajlar -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Mesajlar buraya dinamik olarak eklenecek -->
+            </div>
+
+            <!-- Yazma Göstergesi -->
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <!-- Yazma durumu burada gösterilecek -->
+            </div>
+
+            <!-- Mesaj Girişi -->
+            <div class="chat-input-container">
+                <!-- Yanıt Önizleme -->
+                <div class="reply-preview" id="replyPreview" style="display: none;">
+                    <div class="reply-info">
+                        <div id="replyContent"></div>
+                    </div>
+                    <button class="cancel-reply" id="cancelReplyBtn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="chat-input-wrapper">
+                    <div class="input-actions">
+                        <button class="input-action-btn" id="emojiBtn">
+                            <i class="fas fa-smile"></i>
+                        </button>
+                        <button class="input-action-btn" id="fileBtn" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <input type="file" id="fileInput" style="display: none;" accept="image/*,video/*,audio/*,.pdf,.doc,.docx">
+                    </div>
+
+                    <textarea
+                        class="chat-input"
+                        id="messageInput"
+                        placeholder="Mesajınızı yazın... (Enter ile gönder, Shift+Enter ile yeni satır)"
+                        rows="1"
+                    ></textarea>
+
+                    <button class="send-button" id="sendMessageBtn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sağ Sidebar - GPT Asistanı -->
+        <div class="assistant-sidebar">
+            <div class="assistant-header">
+                <h3>
+                    <i class="fas fa-robot"></i>
+                    FriendZone Asistanı
+                </h3>
+            </div>
+            <div class="assistant-content">
+                <div class="assistant-suggestions">
+                    <div class="suggestion-card" onclick="chatHandler.triggerAssistantSuggestion()">
+                        <div class="suggestion-icon">
+                            <i class="fas fa-lightbulb"></i>
+                        </div>
+                        <div class="suggestion-title">Sohbet Konusu Öner</div>
+                        <div class="suggestion-description">
+                            GPT asistanı grubunuza özel sohbet konuları önersin
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card" onclick="gptAssistant.suggestActivity()">
+                        <div class="suggestion-icon">
+                            <i class="fas fa-calendar-alt"></i>
+                        </div>
+                        <div class="suggestion-title">Etkinlik Planla</div>
+                        <div class="suggestion-description">
+                            Ortak ilgi alanlarınıza göre etkinlik önerileri alın
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card" onclick="gptAssistant.breakIce()">
+                        <div class="suggestion-icon">
+                            <i class="fas fa-snowflake"></i>
+                        </div>
+                        <div class="suggestion-title">Buz Kırıcı Oyun</div>
+                        <div class="suggestion-description">
+                            Eğlenceli bir buz kırıcı oyunla sohbeti canlandırın
+                        </div>
+                    </div>
+
+                    <div class="suggestion-card" onclick="gptAssistant.suggestDiscussion()">
+                        <div class="suggestion-icon">
+                            <i class="fas fa-comments"></i>
+                        </div>
+                        <div class="suggestion-title">Tartışma Başlat</div>
+                        <div class="suggestion-description">
+                            İlginç bir tartışma konusuyla derin sohbetler başlatın
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/chatHandler.js"></script>
+    <script src="js/gptAssistant.js"></script>
+    <script>
+        // Topluluk bilgilerini yükle
+        async function loadCommunityInfo() {
+            try {
+                const communityId = getCommunityIdFromURL();
+                const response = await fetch(`/api/community/${communityId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('communityName').textContent = data.community.name;
+                    document.getElementById('communityDescription').textContent = data.community.description;
+                }
+            } catch (error) {
+                console.error('Topluluk bilgileri yüklenemedi:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadCommunityInfo);
+    </script>
+</body>
+</html>
