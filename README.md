@@ -118,16 +118,6 @@ HOST=0.0.0.0
 
 ---
 
-## 🎯 Son Hedef
-
-- ✅ Çalışır bir Flask backend  
-- ✅ Etkileşimli HTML/CSS/JS frontend  
-- ✅ ML modeli ile kullanıcı–topluluk eşleşmesi  
-- ✅ GPT entegrasyonu ile dinamik öneri asistanı  
-- ✅ Hepsi tek proje dizininde, GitHub’a push edilebilir şekilde
-
----
-
 ## 🚀 Başlatma Adımları
 
 ### 1️⃣ Backend Kurulumu
@@ -218,5 +208,6 @@ Frontend’de:
 
 Bu proje; yapay zekâ, makine öğrenimi, backend ve frontend teknolojilerini bütüncül bir yapıda bir araya getirir.
 **FriendZone**, öğrenciler arasında anlamlı bağlantılar kurmayı hedefleyen akıllı bir sosyal etkileşim platformudur.
+
 
 
