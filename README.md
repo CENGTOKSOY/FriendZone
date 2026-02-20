@@ -1,23 +1,23 @@
-# 🧠 FriendZone
+# FriendZone 
 
 **FriendZone**, üniversite öğrencilerinin kişilik özellikleri ve ilgi alanlarına göre **makine öğrenimi (ML)** tabanlı bir şekilde sanal topluluklar oluşturmasını sağlayan sosyal bir platformdur.  
 Bu proje, bir **üniversite bitirme projesi** kapsamında geliştirilmiştir.
 
 ---
 
-## 🎯 Projenin Amacı
+##  Projenin Amacı:
 
 FriendZone, öğrencilerin:
 
-- 🧍‍♂️ Kendi **kişilik tipi** ve **hobilerine** göre benzer öğrencilerle tanışmasını,  
-- 🧑‍🤝‍🧑 Ortak **sanal topluluklar** (community’ler) içinde etkileşime geçmesini,  
-- 🤖 **GPT tabanlı bir asistan** aracılığıyla grup içinde öneriler, sohbet konuları ve etkinlik fikirleri almasını sağlar.  
+-  Kendi **kişilik tipi** ve **hobilerine** göre benzer öğrencilerle tanışmasını,  
+-  Ortak **sanal topluluklar** (community’ler) içinde etkileşime geçmesini,  
+-  **GPT tabanlı bir asistan** aracılığıyla grup içinde öneriler, sohbet konuları ve etkinlik fikirleri almasını sağlar.  
 
 > Kısacası FriendZone, “Spotify Blend” veya “Netflix öneri motoru” gibi davranır; ancak odak noktası insan eşleşmesidir.
 
 ---
 
-## 🧩 Proje Bileşenleri
+##  Proje Bileşenleri:
 
 ### 🎨 Frontend (HTML, CSS, JS)
 - Kayıt ve giriş ekranları  
@@ -218,4 +218,5 @@ Frontend’de:
 
 Bu proje; yapay zekâ, makine öğrenimi, backend ve frontend teknolojilerini bütüncül bir yapıda bir araya getirir.
 **FriendZone**, öğrenciler arasında anlamlı bağlantılar kurmayı hedefleyen akıllı bir sosyal etkileşim platformudur.
+
 
