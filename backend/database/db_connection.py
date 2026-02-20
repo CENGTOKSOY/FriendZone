@@ -15,4 +15,12 @@ def init_db(app):
         logger.error(f"Veritabanı başlatma hatası: {str(e)}")
         raise
 
+def get_db_session():
+    """Veritabanı session'ını döndür"""
+    return db.session
 
+
+def close_db_session(exception=None):
+    """Veritabanı session'ını kapat"""
+    if exception:
+        logger.error(f"Session kapatma hatası: {str(exception)}")
