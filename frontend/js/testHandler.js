@@ -55,6 +55,9 @@ class TestHandler {
                     }
                 ]
             },
+
+            
+
             // Diğer sorular...
         ];
         this.updateQuestionCount();
