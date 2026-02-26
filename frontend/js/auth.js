@@ -62,21 +62,14 @@ class AuthManager {
         this.setLoadingState(submitBtn, true);
 
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
+            // Demo giriş simülasyonu
+            await this.simulateLogin(data.email, data.password);
 
-            const result = await response.json();
+            this.showSuccess('Başarıyla giriş yapıldı! Yönlendiriliyorsunuz...');
 
-            if (response.ok) {
-                this.handleSuccessfulLogin(result.data);
-            } else {
-                throw new Error(result.message || 'Giriş başarısız');
-            }
+            setTimeout(() => {
+                window.location.href = 'communities.html';
+            }, 1500);
 
         } catch (error) {
             this.showError(error.message);
@@ -107,27 +100,63 @@ class AuthManager {
         this.setLoadingState(submitBtn, true);
 
         try {
-            const response = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
+            // Demo kayıt simülasyonu
+            await this.simulateSignup(data);
 
-            const result = await response.json();
+            this.showSuccess('Hesabınız başarıyla oluşturuldu! Yönlendiriliyorsunuz...');
 
-            if (response.ok) {
-                this.handleSuccessfulSignup(result.data);
-            } else {
-                throw new Error(result.message || 'Kayıt başarısız');
-            }
+            setTimeout(() => {
+                window.location.href = 'personality_test.html';
+            }, 1500);
 
         } catch (error) {
             this.showError(error.message);
         } finally {
             this.setLoadingState(submitBtn, false);
         }
+    }
+
+    async simulateLogin(email, password) {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                // Demo amaçlı basit kontrol
+                if (email && password.length >= 6) {
+                    // Demo kullanıcı oluştur
+                    const user = {
+                        name: email.split('@')[0],
+                        email: email,
+                        is_test_completed: true
+                    };
+
+                    localStorage.setItem('friendzone_token', 'demo_token_' + Date.now());
+                    localStorage.setItem('friendzone_user', JSON.stringify(user));
+
+                    resolve({ success: true, user });
+                } else {
+                    reject(new Error('E-posta veya şifre hatalı.'));
+                }
+            }, 1500);
+        });
+    }
+
+    async simulateSignup(data) {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                const user = {
+                    name: data.name,
+                    email: data.email,
+                    university: data.university,
+                    department: data.department,
+                    year: data.year,
+                    is_test_completed: false
+                };
+
+                localStorage.setItem('friendzone_token', 'demo_token_' + Date.now());
+                localStorage.setItem('friendzone_user', JSON.stringify(user));
+
+                resolve({ success: true });
+            }, 1500);
+        });
     }
 
     validateLoginData(data) {
@@ -197,7 +226,10 @@ class AuthManager {
 
     showFieldError(fieldName, message) {
         const field = document.getElementById(fieldName);
+        if (!field) return;
+
         const formGroup = field.closest('.form-group');
+        if (!formGroup) return;
 
         formGroup.classList.add('error');
 
@@ -213,7 +245,10 @@ class AuthManager {
 
     clearFieldError(fieldName) {
         const field = document.getElementById(fieldName);
+        if (!field) return;
+
         const formGroup = field.closest('.form-group');
+        if (!formGroup) return;
 
         formGroup.classList.remove('error');
 
@@ -233,77 +268,50 @@ class AuthManager {
         }
     }
 
-    handleSuccessfulLogin(data) {
-        // Save token and user data
-        localStorage.setItem('friendzone_token', data.token);
-        localStorage.setItem('friendzone_user', JSON.stringify(data.user));
-
-        // Show success message
-        this.showSuccess('Başarıyla giriş yapıldı! Yönlendiriliyorsunuz...');
-
-        // Redirect to appropriate page
-        setTimeout(() => {
-            if (data.user.is_test_completed) {
-                window.location.href = 'communities.html';
-            } else {
-                window.location.href = 'personality_test.html';
-            }
-        }, 1500);
-    }
-
-    handleSuccessfulSignup(data) {
-        // Save token and user data
-        localStorage.setItem('friendzone_token', data.token);
-        localStorage.setItem('friendzone_user', JSON.stringify(data.user));
-
-        // Show success message
-        this.showSuccess('Hesabınız başarıyla oluşturuldu! Kişilik testine yönlendiriliyorsunuz...');
-
-        // Redirect to personality test
-        setTimeout(() => {
-            window.location.href = 'personality_test.html';
-        }, 2000);
-    }
-
     showError(message) {
-        if (window.app && window.app.showNotification) {
-            window.app.showNotification(message, 'error');
-        } else {
-            alert(`Hata: ${message}`);
-        }
+        this.removeMessages();
+
+        const form = document.querySelector('.auth-form');
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
+
+        form.insertBefore(errorDiv, form.firstChild);
+
+        setTimeout(() => {
+            errorDiv.remove();
+        }, 5000);
     }
 
     showSuccess(message) {
-        if (window.app && window.app.showNotification) {
-            window.app.showNotification(message, 'success');
-        } else {
-            alert(message);
-        }
+        this.removeMessages();
+
+        const form = document.querySelector('.auth-form');
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success-message';
+        successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+
+        form.insertBefore(successDiv, form.firstChild);
+    }
+
+    removeMessages() {
+        const existingMessages = document.querySelectorAll('.error-message, .success-message');
+        existingMessages.forEach(msg => msg.remove());
     }
 
     checkExistingAuth() {
         const token = localStorage.getItem('friendzone_token');
         if (token && (window.location.pathname.includes('login.html') ||
                       window.location.pathname.includes('signup.html'))) {
-
-            // Check if user has completed tests
             this.checkTestStatusAndRedirect();
         }
     }
 
     async checkTestStatusAndRedirect() {
         try {
-            const token = localStorage.getItem('friendzone_token');
-            const response = await fetch('/api/auth/profile', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const user = data.data.user;
-
+            const userStr = localStorage.getItem('friendzone_user');
+            if (userStr) {
+                const user = JSON.parse(userStr);
                 if (user.is_test_completed) {
                     window.location.href = 'communities.html';
                 } else {
@@ -312,7 +320,6 @@ class AuthManager {
             }
         } catch (error) {
             console.error('Auth check failed:', error);
-            // If there's an error, clear invalid token
             localStorage.removeItem('friendzone_token');
             localStorage.removeItem('friendzone_user');
         }
@@ -331,54 +338,6 @@ class AuthManager {
                 }
             });
         }
-
-        // Password strength
-        const passwordInput = document.getElementById('password');
-        if (passwordInput) {
-            passwordInput.addEventListener('input', this.checkPasswordStrength.bind(this));
-        }
-    }
-
-    checkPasswordStrength() {
-        const password = document.getElementById('password').value;
-        const strengthMeter = document.getElementById('passwordStrength');
-
-        if (!strengthMeter) return;
-
-        let strength = 0;
-        let feedback = '';
-
-        // Length check
-        if (password.length >= 8) strength += 1;
-
-        // Complexity checks
-        if (/[A-Z]/.test(password)) strength += 1;
-        if (/[a-z]/.test(password)) strength += 1;
-        if (/[0-9]/.test(password)) strength += 1;
-        if (/[^A-Za-z0-9]/.test(password)) strength += 1;
-
-        // Update strength meter
-        strengthMeter.className = `password-strength strength-${strength}`;
-
-        // Provide feedback
-        switch(strength) {
-            case 0:
-            case 1:
-                feedback = 'Zayıf';
-                break;
-            case 2:
-            case 3:
-                feedback = 'Orta';
-                break;
-            case 4:
-                feedback = 'Güçlü';
-                break;
-            case 5:
-                feedback = 'Çok Güçlü';
-                break;
-        }
-
-        strengthMeter.textContent = `Şifre gücü: ${feedback}`;
     }
 }
 
