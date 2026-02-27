@@ -1,186 +1,225 @@
-from backend.app import db
+from backend import db
 from datetime import datetime
-import json
+from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy.orm import relationship
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class Community(db.Model):
-    """Topluluk modeli"""
+# ==================================================
+# COMMUNITY
+# ==================================================
 
-    __tablename__ = 'communities'
+class Community(db.Model):
+    __tablename__ = "communities"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.Text)
-    category = db.Column(db.String(50))  # technology, sports, arts, outdoor, education, social
-    tags = db.Column(db.Text)  # JSON formatında etiket listesi
 
-    # Topluluk özellikleri
-    compatibility_score = db.Column(db.Float, default=0.0)  # Grup uyumluluk skoru
-    is_active = db.Column(db.Boolean, default=True)
+    name = db.Column(db.String(100), nullable=False, index=True)
+    description = db.Column(db.Text)
+
+    category = db.Column(db.String(50), index=True)
+    tags = db.Column(db.JSON, nullable=True)
+
+    compatibility_score = db.Column(db.Float, default=0.0, index=True)
+    is_active = db.Column(db.Boolean, default=True, index=True)
+
     max_members = db.Column(db.Integer, default=10)
 
-    # Sistem bilgileri
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
 
-    # İlişkiler
-    members = db.relationship('CommunityMember', back_populates='community', cascade='all, delete-orphan')
-    creator = db.relationship('User', foreign_keys=[created_by])
+    created_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
 
-    def __init__(self, name, description=None, category='general', tags=None,
-                 max_members=10, created_by=None):
-        self.name = name
-        self.description = description
-        self.category = category
-        self.tags = json.dumps(tags) if tags else '[]'
-        self.max_members = max_members
-        self.created_by = created_by
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
 
-    def to_dict(self, include_members=False):
-        """Topluluk bilgilerini dictionary formatında döndür"""
-        data = {
-            'id': self.id,
-            'name': self.name,
-            'description': self.description,
-            'category': self.category,
-            'tags': json.loads(self.tags) if self.tags else [],
-            'compatibility_score': self.compatibility_score,
-            'max_members': self.max_members,
-            'current_member_count': len(self.members),
-            'is_active': self.is_active,
-            'created_by': self.created_by,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
+    # ---------------------------
+    # Relationships
+    # ---------------------------
 
-        if include_members:
-            data['members'] = [member.to_dict() for member in self.members]
+    members = relationship(
+        "CommunityMember",
+        back_populates="community",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
 
-        return data
+    creator = relationship(
+        "User",
+        foreign_keys=[created_by],
+        lazy="selectin"
+    )
 
-    def get_member_users(self):
-        """Topluluk üyelerinin kullanıcı bilgilerini getir"""
-        return [member.user for member in self.members]
+    # ---------------------------
+    # Business Logic (No Commit)
+    # ---------------------------
 
-    def add_member(self, user_id, role='member'):
-        """Topluluğa üye ekle"""
-        from backend.models.user_model import User
+    def add_member(self, user_id: int, role="member"):
+        """
+        Commit dışarıdan yapılmalı.
+        """
+        if self.is_full:
+            raise ValueError("Topluluk maksimum kapasiteye ulaştı.")
 
-        # Kullanıcı var mı kontrol et
-        user = User.query.get(user_id)
-        if not user:
-            raise ValueError("Kullanıcı bulunamadı")
-
-        # Zaten üye mi kontrol et
-        existing_member = CommunityMember.query.filter_by(
-            community_id=self.id, user_id=user_id
+        existing = db.session.query(CommunityMember).filter_by(
+            community_id=self.id,
+            user_id=user_id
         ).first()
 
-        if existing_member:
-            raise ValueError("Kullanıcı zaten bu topluluğun üyesi")
+        if existing:
+            raise ValueError("Kullanıcı zaten üye.")
 
-        # Maksimum üye sayısı kontrolü
-        if len(self.members) >= self.max_members:
-            raise ValueError("Topluluk maksimum üye sayısına ulaştı")
-
-        # Yeni üye ekle
         new_member = CommunityMember(
             community_id=self.id,
             user_id=user_id,
-            role=role,
-            joined_at=datetime.utcnow()
+            role=role
         )
 
         db.session.add(new_member)
+        return new_member
 
-        try:
-            db.session.commit()
-            logger.info(f"Kullanıcı {user_id} topluluğa eklendi: {self.name}")
-            return new_member
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Üye ekleme hatası: {str(e)}")
-            raise
-
-    def remove_member(self, user_id):
-        """Topluluktan üye çıkar"""
-        member = CommunityMember.query.filter_by(
-            community_id=self.id, user_id=user_id
+    def remove_member(self, user_id: int):
+        member = db.session.query(CommunityMember).filter_by(
+            community_id=self.id,
+            user_id=user_id
         ).first()
 
-        if member:
-            db.session.delete(member)
-
-            try:
-                db.session.commit()
-                logger.info(f"Kullanıcı {user_id} topluluktan çıkarıldı: {self.name}")
-                return True
-            except Exception as e:
-                db.session.rollback()
-                logger.error(f"Üye çıkarma hatası: {str(e)}")
-                return False
-
-        return False
-
-    def update_compatibility_score(self, score):
-        """Uyumluluk skorunu güncelle"""
-        self.compatibility_score = score
-        self.updated_at = datetime.utcnow()
-
-        try:
-            db.session.commit()
-            return True
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Uyumluluk skoru güncelleme hatası: {str(e)}")
+        if not member:
             return False
 
-    @classmethod
-    def find_by_category(cls, category):
-        """Kategoriye göre toplulukları bul"""
-        return cls.query.filter_by(category=category, is_active=True).all()
+        db.session.delete(member)
+        return True
 
-    @classmethod
-    def find_recommended_communities(cls, user_id, limit=5):
-        """Kullanıcı için önerilen toplulukları bul"""
-        # Bu metod daha sonra ML algoritması ile geliştirilecek
-        return cls.query.filter_by(is_active=True).limit(limit).all()
+    @property
+    def current_member_count(self):
+        return len(self.members)
 
-    def __repr__(self):
-        return f'<Community {self.name} ({self.category})>'
+    @property
+    def is_full(self):
+        return self.current_member_count >= self.max_members
 
+    def update_compatibility_score(self, score: float):
+        self.compatibility_score = float(score)
+        self.updated_at = datetime.utcnow()
 
-class CommunityMember(db.Model):
-    """Topluluk üyeliği modeli (many-to-many ilişki)"""
+    # ---------------------------
+    # Serialization
+    # ---------------------------
 
-    __tablename__ = 'community_members'
-
-    id = db.Column(db.Integer, primary_key=True)
-    community_id = db.Column(db.Integer, db.ForeignKey('communities.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    role = db.Column(db.String(20), default='member')  # member, admin, moderator
-    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_active = db.Column(db.Boolean, default=True)
-
-    # İlişkiler
-    community = db.relationship('Community', back_populates='members')
-    user = db.relationship('User', back_populates='communities')
-
-    def to_dict(self):
-        """Üyelik bilgilerini dictionary formatında döndür"""
-        return {
-            'id': self.id,
-            'community_id': self.community_id,
-            'user_id': self.user_id,
-            'role': self.role,
-            'joined_at': self.joined_at.isoformat() if self.joined_at else None,
-            'is_active': self.is_active,
-            'user': self.user.to_dict() if self.user else None
+    def to_dict(self, include_members=False):
+        data = {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "tags": self.tags or [],
+            "compatibility_score": self.compatibility_score,
+            "max_members": self.max_members,
+            "current_member_count": self.current_member_count,
+            "is_full": self.is_full,
+            "is_active": self.is_active,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
         }
 
+        if include_members:
+            data["members"] = [
+                m.to_dict(include_user=True)
+                for m in self.members
+                if m.is_active
+            ]
+
+        return data
+
+    # ---------------------------
+    # Query Helpers
+    # ---------------------------
+
+    @classmethod
+    def active_by_category(cls, category):
+        return cls.query.filter_by(
+            category=category,
+            is_active=True
+        ).all()
+
+    @classmethod
+    def recommended(cls, limit=5):
+        return (
+            cls.query
+            .filter_by(is_active=True)
+            .order_by(cls.compatibility_score.desc())
+            .limit(limit)
+            .all()
+        )
+
     def __repr__(self):
-        return f'<CommunityMember user:{self.user_id} community:{self.community_id}>'
+        return f"<Community {self.id} | {self.name}>"
+
+
+
+# ==================================================
+# COMMUNITY MEMBER (JOIN TABLE)
+# ==================================================
+
+class CommunityMember(db.Model):
+    __tablename__ = "community_members"
+
+    __table_args__ = (
+        UniqueConstraint("community_id", "user_id", name="uq_community_user"),
+        Index("idx_community_user", "community_id", "user_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    community_id = db.Column(
+        db.Integer,
+        db.ForeignKey("communities.id"),
+        nullable=False
+    )
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False
+    )
+
+    role = db.Column(db.String(20), default="member")
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True, index=True)
+
+    # Relationships
+    community = relationship("Community", back_populates="members")
+    user = relationship("User", back_populates="communities", lazy="selectin")
+
+    def to_dict(self, include_user=False):
+        data = {
+            "id": self.id,
+            "community_id": self.community_id,
+            "user_id": self.user_id,
+            "role": self.role,
+            "joined_at": self.joined_at.isoformat(),
+            "is_active": self.is_active,
+        }
+
+        if include_user and self.user:
+            data["user"] = self.user.to_dict()
+
+        return data
+
+    def __repr__(self):
+        return f"<CommunityMember u:{self.user_id} c:{self.community_id}>"
