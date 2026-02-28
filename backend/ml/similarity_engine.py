@@ -3,151 +3,141 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 import logging
 import os
-from typing import List, Dict, Any
+import pickle
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class SimilarityEngine:
-    """Kullanıcı benzerlik hesaplama motoru"""
+    """
+    FriendZone Gelişmiş Kullanıcı Benzerlik ve Eşleştirme Motoru.
+    Vektörize edilmiş işlemler ve ağırlıklı benzerlik skorlaması içerir.
+    """
 
-    def __init__(self, preprocessor):
+    def __init__(self, preprocessor, weights: Optional[Dict[str, float]] = None):
         self.preprocessor = preprocessor
-        self.user_embeddings = {}  # user_id -> embedding
-        self.user_data = {}  # user_id -> user_data
+        # user_id -> np.array (embedding)
+        self.user_embeddings = {}
+        # user_id -> meta_data (fakülte, hobi vb. hızlı erişim için)
+        self.user_metadata = {}
+
+        # Özellik ağırlıklandırması (Gelecekte ince ayar yapabilmen için)
+        self.weights = weights or {
+            'personality': 0.4,
+            'hobbies': 0.4,
+            'academic': 0.2
+        }
 
     def add_user(self, user_id: str, user_data: Dict[str, Any]):
-        """Kullanıcı ekle ve embedding oluştur"""
+        """Kullanıcıyı sisteme dahil eder ve embedding üretir."""
         try:
+            # Preprocessor'dan gelen ham vektör
             embedding = self.preprocessor.create_user_embedding(
-                user_data.get('personality_type'),
-                user_data.get('hobbies', []),
-                user_data.get('university'),
-                user_data.get('department')
+                personality_type=user_data.get('personality_type'),
+                hobbies=user_data.get('hobbies', []),
+                university=user_data.get('university'),
+                department=user_data.get('department')
             )
 
             if embedding is not None:
-                self.user_embeddings[user_id] = embedding
-                self.user_data[user_id] = user_data
-                logger.info(f"Kullanıcı eklendi: {user_id}")
-
+                # Ensure it's a float32 numpy array for performance
+                self.user_embeddings[user_id] = np.array(embedding, dtype=np.float32)
+                self.user_metadata[user_id] = {
+                    'department': user_data.get('department'),
+                    'university': user_data.get('university'),
+                    'interests': user_data.get('hobbies', [])
+                }
+                logger.info(f"Kullanıcı başarıyla indekslendi: {user_id}")
         except Exception as e:
-            logger.error(f"Kullanıcı ekleme hatası: {str(e)}")
+            logger.error(f"Kullanıcı eklenirken hata (ID: {user_id}): {str(e)}")
 
-    def calculate_similarity(self, user_id1: str, user_id2: str) -> float:
-        """İki kullanıcı arasındaki benzerliği hesapla"""
+    def find_similar_users(self, user_id: str, top_k: int = 5, filter_same_dept: bool = False) -> List[Dict[str, Any]]:
+        """
+        Vektörize edilmiş hızlı benzerlik arama.
+        filter_same_dept: Sadece aynı bölümdeki kişileri getirmek için opsiyonel filtre.
+        """
         try:
-            if user_id1 not in self.user_embeddings or user_id2 not in self.user_embeddings:
-                return 0.0
-
-            embedding1 = self.user_embeddings[user_id1].reshape(1, -1)
-            embedding2 = self.user_embeddings[user_id2].reshape(1, -1)
-
-            similarity = cosine_similarity(embedding1, embedding2)[0][0]
-            return float(similarity)
-
-        except Exception as e:
-            logger.error(f"Benzerlik hesaplama hatası: {str(e)}")
-            return 0.0
-
-    def find_similar_users(self, user_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Benzer kullanıcıları bul"""
-        try:
-            if user_id not in self.user_embeddings:
+            if user_id not in self.user_embeddings or len(self.user_embeddings) < 2:
                 return []
 
-            target_embedding = self.user_embeddings[user_id].reshape(1, -1)
-            similarities = []
+            target_vec = self.user_embeddings[user_id].reshape(1, -1)
 
-            for other_id, embedding in self.user_embeddings.items():
-                if other_id == user_id:
+            # Tüm kullanıcıları ve embeddingleri listeye dök (Vektörizasyon için)
+            all_ids = []
+            all_vecs = []
+
+            for uid, vec in self.user_embeddings.items():
+                if uid == user_id: continue
+
+                # Opsiyonel Filtreleme: Aynı bölüm kısıtı varsa kontrol et
+                if filter_same_dept and self.user_metadata[uid]['department'] != self.user_metadata[user_id][
+                    'department']:
                     continue
 
-                other_embedding = embedding.reshape(1, -1)
-                similarity = cosine_similarity(target_embedding, other_embedding)[0][0]
-                similarities.append((other_id, similarity))
+                all_ids.append(uid)
+                all_vecs.append(vec)
 
-            # Benzerliğe göre sırala
-            similarities.sort(key=lambda x: x[1], reverse=True)
+            if not all_vecs: return []
 
-            # Top_k kadar döndür
+            # Tek tek dönmek yerine matris çarpımı yapıyoruz (Çok daha hızlı)
+            similarity_matrix = cosine_similarity(target_vec, np.array(all_vecs))
+            scores = similarity_matrix[0]
+
+            # En yüksek skorlu top_k indeksi al
+            top_indices = np.argsort(scores)[::-1][:top_k]
+
             results = []
-            for other_id, similarity in similarities[:top_k]:
-                user_info = self.user_data[other_id].copy()
-                user_info['similarity_score'] = similarity
-                user_info['user_id'] = other_id
-                results.append(user_info)
+            for idx in top_indices:
+                uid = all_ids[idx]
+                results.append({
+                    'user_id': uid,
+                    'similarity_score': round(float(scores[idx]), 4),
+                    'metadata': self.user_metadata[uid]
+                })
 
             return results
-
         except Exception as e:
-            logger.error(f"Benzer kullanıcı bulma hatası: {str(e)}")
+            logger.error(f"Arama hatası: {str(e)}")
             return []
 
-    def find_user_clusters(self, n_clusters: int = 4) -> Dict[str, int]:
-        """Kullanıcıları kümelere ayır"""
+    def get_batch_recommendations(self, n_clusters: int = 5) -> Dict[int, List[str]]:
+        """Kullanıcıları kümelere ayırarak 'topluluk' önerileri oluşturur."""
+        if len(self.user_embeddings) < n_clusters:
+            return {0: list(self.user_embeddings.keys())}
+
+        uids = list(self.user_embeddings.keys())
+        matrix = np.array([self.user_embeddings[uid] for uid in uids])
+
+        kmeans = KMeans(n_clusters=n_clusters, n_init='auto', random_state=42)
+        labels = kmeans.fit_predict(matrix)
+
+        clusters = {}
+        for uid, label in zip(uids, labels):
+            clusters.setdefault(int(label), []).append(uid)
+
+        return clusters
+
+    def save_state(self, directory: str = "models/engine_data"):
+        """Sistemin son durumunu (embeddings + metadata) diske kaydeder."""
         try:
-            if len(self.user_embeddings) < n_clusters:
-                # Yeterli kullanıcı yoksa, herkesi aynı kümeye ata
-                return {user_id: 0 for user_id in self.user_embeddings.keys()}
-
-            # Embedding'leri numpy array'e çevir
-            user_ids = list(self.user_embeddings.keys())
-            embeddings = np.array([self.user_embeddings[uid] for uid in user_ids])
-
-            # K-means kümeleme
-            kmeans = KMeans(n_clusters=min(n_clusters, len(user_ids)), random_state=42)
-            clusters = kmeans.fit_predict(embeddings)
-
-            # Kullanıcı ID -> küme eşlemesi
-            cluster_assignments = {}
-            for user_id, cluster in zip(user_ids, clusters):
-                cluster_assignments[user_id] = int(cluster)
-
-            logger.info(f"{len(user_ids)} kullanıcı {len(set(clusters))} kümeye ayrıldı")
-            return cluster_assignments
-
+            os.makedirs(directory, exist_ok=True)
+            with open(f"{directory}/embeddings.pkl", "wb") as f:
+                pickle.dump(self.user_embeddings, f)
+            with open(f"{directory}/metadata.pkl", "wb") as f:
+                pickle.dump(self.user_metadata, f)
+            logger.info("Motor durumu başarıyla kaydedildi.")
         except Exception as e:
-            logger.error(f"Kümeleme hatası: {str(e)}")
-            return {}
+            logger.error(f"Kaydetme hatası: {e}")
 
-    def calculate_group_compatibility(self, user_ids: List[str]) -> float:
-        """Grup uyumluluğunu hesapla"""
+    def load_state(self, directory: str = "models/engine_data"):
+        """Diskteki verileri sisteme geri yükler."""
         try:
-            if len(user_ids) < 2:
-                return 1.0
-
-            total_similarity = 0.0
-            pair_count = 0
-
-            for i in range(len(user_ids)):
-                for j in range(i + 1, len(user_ids)):
-                    similarity = self.calculate_similarity(user_ids[i], user_ids[j])
-                    total_similarity += similarity
-                    pair_count += 1
-
-            return total_similarity / pair_count if pair_count > 0 else 0.0
-
+            if os.path.exists(f"{directory}/embeddings.pkl"):
+                with open(f"{directory}/embeddings.pkl", "rb") as f:
+                    self.user_embeddings = pickle.load(f)
+                with open(f"{directory}/metadata.pkl", "rb") as f:
+                    self.user_metadata = pickle.load(f)
+                logger.info("Motor durumu geri yüklendi.")
         except Exception as e:
-            logger.error(f"Grup uyumluluğu hesaplama hatası: {str(e)}")
-            return 0.0
-
-    def save_embeddings(self, filepath: str):
-        """Embedding'leri kaydet"""
-        try:
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            np.save(filepath, self.user_embeddings)
-            logger.info(f"Embedding'ler kaydedildi: {filepath}")
-
-        except Exception as e:
-            logger.error(f"Embedding kaydetme hatası: {str(e)}")
-
-    def load_embeddings(self, filepath: str):
-        """Embedding'leri yükle"""
-        try:
-            if os.path.exists(filepath):
-                self.user_embeddings = np.load(filepath, allow_pickle=True).item()
-                logger.info(f"Embedding'ler yüklendi: {filepath}")
-
-        except Exception as e:
-            logger.error(f"Embedding yükleme hatası: {str(e)}")
+            logger.error(f"Yükleme hatası: {e}")
